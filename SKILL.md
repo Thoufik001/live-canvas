@@ -12,6 +12,9 @@ broken, mid-edit or blank.
 
 ## 1. Start (once, at the very beginning of the task)
 
+In the commands below, `<skill-dir>` is the absolute path of the folder that contains this SKILL.md
+(for example `.claude/skills/live-canvas`). Resolve it before running anything.
+
 ```bash
 node <skill-dir>/scripts/server.mjs &        # serves the canvas, tails .live-canvas/stream.jsonl
 ```

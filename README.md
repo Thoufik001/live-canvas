@@ -18,8 +18,8 @@ only on `localhost`; none of it ships with your app.
 ## Install
 
 ```bash
-npx live-canvas install            # Claude Code: copies the skill to ~/.claude/skills
-npx live-canvas install --project  # …or just this repo (.claude/skills)
+npx live-canvas                    # Claude Code: copies the skill to ~/.claude/skills
+npx live-canvas --project          # …or just this repo (.claude/skills)
 ```
 
 Other agents (Codex, Cursor, …) using the community `skills` CLI:
