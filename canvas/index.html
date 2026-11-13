@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Canvas</title>
+<style>
+:root{color-scheme:light dark;--bg:#e8e6e1;--bar:#fbfaf8;--ink:#1d1c1a;--mut:#77746c;--line:#d8d5ce;--on:#1d1c1a;--onink:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#141414;--bar:#1e1e1d;--ink:#eceae6;--mut:#8d8a83;--line:#33322f;--on:#eceae6;--onink:#141414}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.4 -apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;min-height:100vh}
+
+/* ---------- chrome ---------- */
+#bar{position:fixed;inset:0 0 auto 0;height:44px;z-index:50;display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--bar);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.brand b{font-weight:650}
+#status{color:var(--mut)}
+#dot{width:8px;height:8px;border-radius:50%;background:var(--mut)}
+#dot.live{background:#16a870;animation:pulse 1.6s ease-in-out infinite}
+#dot.ok{background:#16a870}
+#dot.off{background:#cf3f3f}
+@keyframes pulse{50%{box-shadow:0 0 0 5px rgba(22,168,112,.18)}}
+#agents{display:flex;gap:6px;flex:1;min-width:0;overflow:hidden}
+.chip{transition:opacity .4s;display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 7px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.chip b{font-weight:600}
+.chip em{font-style:normal;color:var(--mut);max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+button{font:inherit;color:var(--ink);background:transparent;border:0;padding:5px 10px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--on);color:var(--onink)}
+#replay{border:1px solid var(--line);border-radius:7px}
+button:hover:not(.on){background:rgba(127,127,127,.12)}
+
+/* ---------- stage ---------- */
+#stage{padding:68px 24px 110px}
+#root{position:relative;margin:0 auto;width:min(var(--w,1040px),100%);min-height:calc(100vh - 190px);background:#fff;color:#1d1c1a;border-radius:10px;box-shadow:0 1px 0 rgba(0,0,0,.04),0 28px 60px -30px rgba(0,0,0,.4);overflow:clip}
+#empty{position:absolute;inset:0;display:grid;place-content:center;gap:8px;text-align:center;color:#77746c;padding:24px;font:13px/1.5 -apple-system,system-ui,sans-serif}
+#empty b{color:#1d1c1a;font-size:15px}
+#empty code{background:#f1efea;padding:1px 6px;border-radius:4px;font:12px ui-monospace,Menlo,monospace}
+
+/* wireframe state: strip decoration, keep layout so sizes are real */
+[data-lc]{transition:background-color .6s,border-color .6s,box-shadow .6s,color .6s,opacity .6s}
+.lc-wire{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#26241f!important;text-shadow:none!important}
+img.lc-wire{opacity:0}
+.lc-typing::before{content:"\200b"}
+.lc-typing::after{content:"";display:inline-block;width:2px;height:1em;margin-left:1px;vertical-align:text-bottom;background:currentColor;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ---------- overlay: cursors + selection boxes ---------- */
+#layer{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
+.cur{position:absolute;left:0;top:0;will-change:transform;transition:transform .6s cubic-bezier(.3,.7,.2,1),opacity .5s}
+.cur svg{display:block;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.3))}
+.pill{position:absolute;left:13px;top:15px;white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;background:var(--c);color:#fff;font:600 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:3px 6px;border-radius:4px}
+.pill small{font:inherit;font-weight:500;opacity:.88;margin-left:4px}
+.sel{position:absolute;left:0;top:0;border:1.5px solid var(--c);transition:opacity .45s}
+.sel i{position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid var(--c);transform:translate(-50%,-50%)}
+.sel i:nth-child(1){left:0;top:0}.sel i:nth-child(2){left:100%;top:0}.sel i:nth-child(3){left:0;top:100%}.sel i:nth-child(4){left:100%;top:100%}
+.sel b{position:absolute;left:50%;top:100%;transform:translate(-50%,7px);background:var(--c);color:#fff;font:600 9px/1 ui-monospace,Menlo,monospace;padding:3px 5px;border-radius:3px;white-space:nowrap;transition:opacity .2s}
+
+#banner{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;background:var(--on);color:var(--onink);border-radius:999px;box-shadow:0 12px 30px -10px rgba(0,0,0,.45)}
+#banner[hidden]{display:none}
+#banner a{color:var(--onink);background:rgba(127,127,127,.28);padding:6px 12px;border-radius:999px;text-decoration:none;font-weight:600}
+#banner button{color:var(--onink);border:1px solid rgba(127,127,127,.5);border-radius:999px}
+#banner a[hidden]{display:none}
+</style>
+</head>
+<body>
+<div id="bar">
+  <div class="brand"><span id="dot" class="off"></span><b>Live canvas</b><span id="status">Connecting…</span></div>
+  <div id="agents"></div>
+  <div class="seg" id="speed"><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="99">Instant</button></div>
+  <button id="replay">Replay</button>
+</div>
+<div id="stage"><div id="root"></div></div>
+<div id="layer"></div>
+<div id="banner" hidden><span id="bmsg">Build complete</span><a id="blink" target="_blank" rel="noopener" hidden>Open real app →</a><button id="brep">Replay</button></div>
+
+<script>
+(() => {
+const PALETTE = ['#e0457b','#6a4cff','#1d9bd7','#16a870','#e8672a','#d9a000','#8a3ffc','#cf3f3f'];
+const ROLE_COLOR = { Layout: '#6a4cff', Content: '#e0457b', Media: '#e8672a', Style: '#16a870' };
+// A cursor's name is the *kind of work* it does, derived from the op — unless the op names an agent.
+function roleOf(op) {
+  if (op.agent) return op.agent;
+  switch (op.op) {
+    case 'add': return op.media || op.src || op.tag === 'img' ? 'Media' : op.text != null && op.text !== '' ? 'Content' : 'Layout';
+    case 'text': return 'Content';
+    case 'set': return op.text != null ? 'Content' : 'Style';
+    case 'reveal': return 'Style';
+    case 'remove': case 'done': return 'Layout';
+    default: return 'Agent'; // presence / say
+  }
+}
+const ARROW = '<svg width="18" height="18" viewBox="0 0 16 16"><path d="M1.5 1.2 7 14.2l1.9-5.4 5.4-1.9z" style="fill:var(--c)" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+const BAD_TAG = /^(script|iframe|object|embed|style|link|meta|base|form)$/i;
+const $ = (s) => document.querySelector(s);
+const root = $('#root'), layer = $('#layer'), agentsEl = $('#agents'), statusEl = $('#status'), dot = $('#dot'), banner = $('#banner');
+
+let speed = 1, epoch = 0, finished = false, connected = false, bootId = null, autoId = 0;
+const els = new Map(), agents = new Map(), sels = new Map();
+let history = [];
+let dseq = 0;
+const parentOf = new Map(), pending = new Set();
+function within(id, anc) { for (let i = 0; id && i < 60; i++) { if (id === anc) return true; id = parentOf.get(id); } return false; }
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms / speed)));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/* ---------- empty / page ---------- */
+function showEmpty() {
+  if ($('#empty')) return;
+  const d = document.createElement('div');
+  d.id = 'empty';
+  d.innerHTML = '<b>Waiting for the agent…</b><span>Append ops to <code>.live-canvas/stream.jsonl</code><br>or run <code>node live-canvas/scripts/demo.mjs</code></span>';
+  root.appendChild(d);
+}
+const hideEmpty = () => { const e = $('#empty'); if (e) e.remove(); };
+function applyPage(op) {
+  if (op.title) document.title = op.title + ' · Live canvas';
+  if (op.width) root.style.setProperty('--w', typeof op.width === 'number' ? op.width + 'px' : op.width);
+  if (op.bg) root.style.background = op.bg;
+  if (op.font) root.style.font = op.font;
+  if (op.color) root.style.color = op.color;
+  if (op.css) root.style.cssText += ';' + op.css;
+  hideEmpty();
+}
+
+/* ---------- agents / cursors ---------- */
+function agent(name) {
+  let a = agents.get(name);
+  if (a) return a;
+  const color = ROLE_COLOR[name] || PALETTE[agents.size % PALETTE.length];
+  const cur = document.createElement('div');
+  cur.className = 'cur'; cur.style.setProperty('--c', color);
+  cur.innerHTML = ARROW + '<div class="pill"><span></span><small></small></div>';
+  cur.querySelector('span').textContent = name;
+  const chip = document.createElement('span');
+  chip.className = 'chip'; chip.style.setProperty('--c', color);
+  chip.innerHTML = '<i></i><b></b><em></em>';
+  chip.querySelector('b').textContent = name;
+  const sx = Math.random() < .5 ? -30 : innerWidth + 30, sy = rnd(90, Math.max(120, innerHeight - 90));
+  a = { name, color, cur, chip, small: cur.querySelector('small'), chipLabel: chip.querySelector('em'),
+        queue: [], busy: false, x: sx, y: sy, lastActive: performance.now() };
+  cur.style.transition = 'none';
+  cur.style.transform = `translate(${sx}px,${sy}px)`;
+  layer.appendChild(cur); agentsEl.appendChild(chip); void cur.offsetWidth;
+  agents.set(name, a);
+  return a;
+}
+function label(a, t) { a.small.textContent = t ? '· ' + t : ''; a.chipLabel.textContent = t || ''; }
+function moveNow(a, x, y, ms = 500) {
+  x = clamp(x, 0, innerWidth - 24); y = clamp(y, 50, innerHeight - 24);
+  a.cur.style.transition = `transform ${Math.max(0.01, ms / speed / 1000)}s cubic-bezier(.3,.7,.2,1),opacity .5s`;
+  a.cur.style.transform = `translate(${x}px,${y}px)`;
+  a.x = x; a.y = y;
+}
+async function moveTo(a, x, y) {
+  const ms = clamp(160 + Math.hypot(x - a.x, y - a.y) * 0.4, 180, 700);
+  moveNow(a, x, y, ms);
+  await sleep(ms);
+}
+
+/* ---------- selection boxes (the "drawing a frame" effect) ---------- */
+function updSel(s, now) {
+  const r = s.el.getBoundingClientRect();
+  const p = speed > 5 ? 1 : Math.min(1, (now - s.t0) / 380), e = 1 - Math.pow(1 - p, 3);
+  s.n.style.transform = `translate(${r.left}px,${r.top}px)`;
+  s.n.style.width = Math.max(2, r.width * e) + 'px';
+  s.n.style.height = Math.max(2, r.height * e) + 'px';
+  const t = `${Math.round(r.width)} × ${Math.round(r.height)}`;
+  if (t !== s.txt) { s.b.textContent = t; s.txt = t; }
+  s.b.style.opacity = p < 1 ? 0 : 1;
+}
+function makeSel(id, el, a) {
+  killSel(id);
+  const n = document.createElement('div');
+  n.className = 'sel'; n.style.setProperty('--c', a.color);
+  n.innerHTML = '<i></i><i></i><i></i><i></i><b></b>';
+  layer.appendChild(n);
+  const s = { el, n, b: n.querySelector('b'), t0: performance.now(), txt: '' };
+  sels.set(id, s); updSel(s, s.t0);
+}
+function killSel(id) {
+  const s = sels.get(id); if (!s) return;
+  sels.delete(id); s.n.style.opacity = '0'; setTimeout(() => s.n.remove(), 480);
+}
+(function frame(now) { for (const s of sels.values()) updSel(s, now); requestAnimationFrame(frame); })(performance.now());
+
+function reveal(id) {
+  const el = els.get(id); if (!el) return;
+  el.classList.remove('lc-wire', 'lc-typing');
+  killSel(id);
+}
+
+/* ---------- helpers ---------- */
+async function waitFor(id, ep, ms = 8000) {
+  const t0 = performance.now();
+  while (ep === epoch) {
+    const e = els.get(id); if (e && e.isConnected) return e;
+    if (performance.now() - t0 > ms) return null;
+    await new Promise((r) => setTimeout(r, 60));
+  }
+  return null;
+}
+async function ensureVisible(el, ep) {
+  const r = el.getBoundingClientRect();
+  if (r.top >= 60 && r.top <= innerHeight - 130) return;
+  window.scrollTo({ top: scrollY + r.top - innerHeight * 0.3, behavior: speed > 5 ? 'auto' : 'smooth' });
+  await sleep(430);
+}
+function safeAttr(el, k, v) {
+  if (/^on/i.test(k)) return;
+  v = String(v);
+  if (/^(href|src|action|formaction|xlink:href)$/i.test(k) && /^\s*javascript:/i.test(v)) return;
+  try { el.setAttribute(k, v); } catch {}
+}
+function caret(a, tn, el) {
+  try {
+    const rg = document.createRange(); rg.setStart(tn, tn.length); rg.collapse(true);
+    const rc = rg.getClientRects()[0] || el.getBoundingClientRect();
+    moveNow(a, rc.right + 2, rc.bottom - 2, 140);
+  } catch {}
+}
+async function typeInto(el, text, a, ep, append) {
+  el.classList.add('lc-typing');
+  let tn;
+  if (append) { const l = el.lastChild; tn = l && l.nodeType === 3 ? l : el.appendChild(document.createTextNode('')); }
+  else { [...el.childNodes].forEach((n) => { if (n.nodeType === 3) n.remove(); }); tn = el.insertBefore(document.createTextNode(''), el.firstChild); }
+  const chars = [...text], k = chars.length > 140 ? 0.5 : 1;
+  for (let i = 0; i < chars.length; i++) {
+    if (ep !== epoch) return;
+    tn.data += chars[i];
+    if (i % 6 === 0 || i === chars.length - 1) caret(a, tn, el);
+    await sleep((chars[i] === ' ' ? 24 : 12 + Math.random() * 16) * k);
+  }
+  el.classList.remove('lc-typing');
+}
+
+/* ---------- ops ---------- */
+async function opAdd(op, a, ep) {
+  const parent = !op.parent || op.parent === 'root' ? root : (await waitFor(op.parent, ep)) || root;
+  if (ep !== epoch) return;
+  let tag = String(op.tag || 'div').toLowerCase();
+  if (BAD_TAG.test(tag) || !/^[a-z][a-z0-9-]*$/.test(tag)) tag = 'div';
+  const el = document.createElement(tag);
+  el.dataset.lc = op.id;
+  if (op.css) el.style.cssText = op.css;
+  for (const [k, v] of Object.entries(op.attrs || {})) safeAttr(el, k, v);
+  if (op.src) safeAttr(el, 'src', op.src);
+  el.classList.add('lc-wire');
+  const ref = op.before ? els.get(op.before) : null;
+  parent.insertBefore(el, ref && ref.parentNode === parent ? ref : null);
+  els.set(op.id, el); hideEmpty();
+  const hasText = op.text != null && op.text !== '';
+  if (hasText) el.classList.add('lc-typing');
+
+  await ensureVisible(el, ep); if (ep !== epoch) return;
+  let r = el.getBoundingClientRect();
+  await moveTo(a, r.left, r.top); if (ep !== epoch) return;
+  makeSel(op.id, el, a);
+  r = el.getBoundingClientRect();
+  await Promise.all([moveTo(a, r.right, r.bottom), sleep(380)]); if (ep !== epoch) return;
+  if (hasText) await typeInto(el, String(op.text), a, ep, false);
+  const leaf = hasText || !!op.src || tag === 'img';
+  if (op.reveal === true || (leaf && op.hold !== true)) { await sleep(120); reveal(op.id); }
+}
+
+async function opDone(op, a, ep) {
+  while (ep === epoch && [...agents.values()].some((x) => x !== a && (x.busy || x.queue.length))) await new Promise((r) => setTimeout(r, 100));
+  if (ep !== epoch) return;
+  for (const id of [...els.keys()]) reveal(id);
+  finished = true; setStatus();
+  await sleep(450);
+  for (const x of agents.values()) moveNow(x, innerWidth - 80 - rnd(0, 140), innerHeight - 130 - rnd(0, 40), 900);
+  await sleep(1300);
+  for (const x of agents.values()) x.cur.style.opacity = '0';
+  window.scrollTo({ top: 0, behavior: speed > 5 ? 'auto' : 'smooth' });
+  $('#bmsg').textContent = op.message || 'Build complete';
+  const link = $('#blink');
+  if (op.url) { link.href = op.url; link.hidden = false; } else link.hidden = true;
+  banner.hidden = false;
+}
+
+const autoLabel = (o) => ({ add: `adding ${o.id}`, text: `typing in ${o.id}`, set: `editing ${o.id}`,
+  reveal: `styling ${o.id || (o.ids || []).join(', ')}`, remove: `removing ${o.id}`, done: 'finishing' }[o.op] || '');
+
+async function run(op, a, ep) {
+  label(a, op.say || autoLabel(op)); a.lastActive = performance.now(); setStatus();
+  a.cur.style.opacity = '1'; a.chip.style.opacity = '1';
+  switch (op.op) {
+    case 'add': await opAdd(op, a, ep); break;
+    case 'text': {
+      const el = await waitFor(op.id, ep); if (!el) break;
+      await ensureVisible(el, ep);
+      const r = el.getBoundingClientRect(); await moveTo(a, r.left + 6, r.top + 6);
+      await typeInto(el, String(op.text ?? ''), a, ep, !!op.append);
+      if (op.reveal === true) reveal(op.id);
+      break;
+    }
+    case 'set': {
+      const el = await waitFor(op.id, ep); if (!el) break;
+      await ensureVisible(el, ep);
+      const r = el.getBoundingClientRect(); await moveTo(a, r.left + r.width / 2, r.top + Math.min(r.height / 2, 40));
+      if (op.css) el.style.cssText += ';' + op.css;
+      for (const [k, v] of Object.entries(op.attrs || {})) safeAttr(el, k, v);
+      if (op.text != null) await typeInto(el, String(op.text), a, ep, !!op.append);
+      break;
+    }
+    case 'reveal': {
+      for (const id of op.ids || [op.id]) {
+        // a reveal waits until every earlier op inside that element (any cursor) has finished
+        while (ep === epoch && [...pending].some((p) => p._s < op._s && within(p.id, id))) await new Promise((r) => setTimeout(r, 60));
+        const el = await waitFor(id, ep); if (!el) continue;
+        const r = el.getBoundingClientRect(); await moveTo(a, r.right - 8, r.top + 8);
+        reveal(id); await sleep(140);
+      }
+      break;
+    }
+    case 'remove': {
+      const el = await waitFor(op.id, ep); if (!el) break;
+      const r = el.getBoundingClientRect(); await moveTo(a, r.left + r.width / 2, r.top + r.height / 2);
+      el.remove(); els.delete(op.id); killSel(op.id); break;
+    }
+    case 'done': await opDone(op, a, ep); break;
+    default: break; // presence / say / unknown: label only
+  }
+}
+
+async function pump(a) {
+  if (a.busy) return;
+  a.busy = true; const ep = epoch;
+  while (a.queue.length && ep === epoch) {
+    const op = a.queue.shift();
+    try { await run(op, a, ep); } catch (e) { console.warn('op failed', op, e); }
+    pending.delete(op); a.lastActive = performance.now();
+  }
+  if (ep === epoch) { a.busy = false; setStatus(); }
+}
+
+function dispatch(op) {
+  if (!op || typeof op !== 'object') return;
+  if (op.op === 'page') return applyPage(op);
+  if (op.op === 'add' && !op.id) op.id = 'n' + ++autoId;
+  op._s = ++dseq;
+  if (op.op === 'add') parentOf.set(op.id, op.parent || 'root');
+  if (op.id && op.op !== 'reveal') pending.add(op);
+  const a = agent(roleOf(op));
+  a.queue.push(op); pump(a); setStatus();
+}
+function receive(op) {
+  if (op.op === 'reset') { history = []; resetView(); return; }
+  history.push(op); dispatch(op);
+}
+
+/* ---------- view state ---------- */
+function resetView() {
+  epoch++; finished = false; els.clear(); parentOf.clear(); pending.clear();
+  sels.forEach((s) => s.n.remove()); sels.clear();
+  agents.forEach((a) => a.cur.remove()); agents.clear(); agentsEl.textContent = '';
+  root.textContent = ''; root.removeAttribute('style'); showEmpty();
+  banner.hidden = true; document.title = 'Live Canvas'; setStatus(); window.scrollTo(0, 0);
+}
+function setStatus() {
+  const busy = [...agents.values()].some((a) => a.busy || a.queue.length);
+  statusEl.textContent = !connected ? 'Reconnecting…' : finished ? 'Complete' : agents.size ? (busy ? 'Building…' : 'Idle') : 'Waiting for the agent…';
+  dot.className = !connected ? 'off' : finished ? 'ok' : 'live';
+}
+function replay() { const h = history.slice(); resetView(); h.forEach(dispatch); }
+
+/* a cursor that has finished its work fades away; it fades back in when it has work again */
+setInterval(() => {
+  const now = performance.now();
+  for (const a of agents.values()) {
+    if (a.busy || a.queue.length || now - a.lastActive < 1500) continue;
+    a.cur.style.opacity = '0';
+    a.chip.style.opacity = '.4';
+    if (a.small.textContent) label(a, '');
+  }
+}, 400);
+
+/* ---------- wiring ---------- */
+$('#speed').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  speed = Number(b.dataset.s);
+  [...$('#speed').children].forEach((x) => x.classList.toggle('on', x === b));
+});
+$('#replay').onclick = $('#brep').onclick = replay;
+
+const es = new EventSource('/events');
+es.addEventListener('hello', (e) => {
+  const b = JSON.parse(e.data).boot;
+  if (bootId && bootId !== b) return location.reload(); // server restarted
+  bootId = b;
+});
+es.onopen = () => { connected = true; setStatus(); };
+es.onerror = () => { connected = false; setStatus(); };
+es.onmessage = (e) => { try { receive(JSON.parse(e.data)); } catch {} };
+
+showEmpty(); setStatus();
+window.__lc = { receive, replay, get speed() { return speed; } }; // handy for debugging
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "live-canvas",
+  "version": "0.1.0",
+  "description": "Watch your coding agent design the UI live: named cursors draw frames, type copy and reveal styling in a browser tab while it builds.",
+  "type": "module",
+  "bin": { "live-canvas": "bin/cli.mjs" },
+  "files": ["bin", "scripts", "canvas", "SKILL.md", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "keywords": ["agent-skills", "claude-code", "codex", "skill", "ui", "live", "preview"],
+  "license": "MIT"
+}
